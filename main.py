@@ -51,9 +51,13 @@ for i, row in gen_info.iterrows():
 total_installed_capacity = sum(installed_capacities)
 print(f"Total Installed Capacity = {total_installed_capacity} MW")
 
-# Create  Generators (gen) for the PV buses  （Set Voltage Setpoint）
+# # Remove existing generators on PV buses to avoid duplicates
+# for bus in pv_buses:
+#     net.gen.drop(net.gen[net.gen['bus'] == bus].index, inplace=True)
+
+# Create  Generators (gen) for the PV buses（define the Voltage Set-point）
 for bus, installed_capacity in zip(pv_buses, installed_capacities):
-    pp.create_gen(net, bus, p_mw=0,  vm_pu=1.00, max_p_mw=installed_capacity, name=f"PV_bus_{bus}")
+    pp.create_gen(net, bus, p_mw=0, vm_pu=1.00, max_p_mw=installed_capacity, name=f"PV_bus_{bus}")
 
 # View all gen information
 gen_info = net.gen
@@ -96,17 +100,17 @@ for i, bus in enumerate(pv_buses):
 
     # Create ConstControl objects for each PV bus to update active power over time
     for i, bus in enumerate(pv_buses):
-        element_index = net.sgen[net.sgen['bus'] == bus].index[0]
+        element_index = net.gen[net.gen['bus'] == bus].index[0]
         column_name = f'bus_{bus}_p_mw'
-        ConstControl(net, element='sgen', variable='p_mw', element_index=element_index, data_source=data_source,
+        ConstControl(net, element='gen', variable='p_mw', element_index=element_index, data_source=data_source,
                      profile_name=column_name)
 
 # Set up the output writer for results
 # output_dir = "D:/My workspace/Results"#Home PC
 output_dir = "C:/Apps-SU/My workspace/" #Lab PC
 ow = OutputWriter(net, output_path=output_dir, output_file_type=".xlsx")
-# Define record
-ow.log_variable('res_sgen', 'p_mw')
+# Define Record
+ow.log_variable('res_gen', 'p_mw')
 
 # Define the number of time steps for the simulation
 # time_steps = range(len(profiles_df))  # Define time steps as a range matching the data length
@@ -115,8 +119,8 @@ time_steps = list(range(0, 8760))
 run_timeseries(net, time_steps=time_steps)
 
 # ========== Plot the 5PV buses power function =============
-# Define the output directory and updated file path for res_sgen
-output_dir = "C:/Apps-SU/My workspace/res_sgen/"
+# Define the output directory and updated file path for res_gen
+output_dir = "C:/Apps-SU/My workspace/res_gen/"
 result_file_path = os.path.join(output_dir, "p_mw.xlsx")
 # Assuming the Excel file has columns corresponding to the first 5 buses for PV generation profiles
 try:
@@ -127,7 +131,7 @@ try:
 
     # Plot each bus's generation profile from the loaded data
     for i, bus in enumerate(pv_buses):
-        plt.plot(pv_generation_data.iloc[:, i], label=f'Bus {bus}')  # Use column for bus
+        plt.plot(pv_generation_data.iloc[:, i], label=f'Bus {bus}')  # Use column for buses
 
     plt.xlabel('Time')
     plt.ylabel('PV Generation (MW)')
@@ -138,13 +142,18 @@ except FileNotFoundError:
     print(f"File not found: {result_file_path}")
 
 # ========== OPF with Voltage Constraints =============
+
 # Set voltage constraints to ±5% around 1.00 p.u.
-net.bus['min_vm_pu'] = 0.95
-net.bus['max_vm_pu'] = 1.05
+# net.bus['min_vm_pu'] = 0.95
+# net.bus['max_vm_pu'] = 1.05
+
 # Perform optimal power flow (OPF) analysis
 pp.runopp(net)
 
 # Display results from the OPF
-print("OPF Results:")
-print(net.res_bus)
-print(net.res_line)
+if not pp.runopp(net):
+    print("OPF did not converge.")
+else:
+    print("OPF Results:")
+    print(net.res_bus)
+    print(net.res_line)
